@@ -175,6 +175,10 @@ export class ByteBuffer {
     }
 
     pjstr(str) {
+        if (typeof str !== 'string') {
+            str = str.toString();
+        }
+
         for (let i = 0; i < str.length; ++i) {
             this.p1(str.charCodeAt(i));
         }
@@ -183,6 +187,10 @@ export class ByteBuffer {
     }
 
     pjstr2(str) {
+        if (typeof str !== 'string') {
+            str = str.toString();
+        }
+
         this.p1(0); // version prepended
         for (let i = 0; i < str.length; ++i) {
             this.p1(str.charCodeAt(i));

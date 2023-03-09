@@ -34,31 +34,66 @@ const JS5_OUT = {
 
 // World List Server
 
-const countries = [
-    {
-        flag: 0,
-        name: 'Anywhere'
-    },
-    {
-        flag: 1,
-        name: 'United States'
-    }
-];
+const COUNTRY_FLAG = {
+    UNITED_STATES: 0, // fallback flag actually
+    AUSTRIA: 15,
+    AUSTRALIA: 16,
+    GERMANY: 22,
+    BRAZIL: 31,
+    CANADA: 38,
+    SWITZERLAND: 43,
+    CHINA: 48,
+    DENMARK: 58,
+    FINLAND: 69,
+    FRANCE: 74,
+    UNITED_KINGDOM: 77,
+    IRELAND: 101,
+    INDIA: 103,
+    MEXICO: 152,
+    NETHERLANDS: 161,
+    NORWAY: 162,
+    NEW_ZEALAND: 166,
+    PORTUGAL: 179,
+    SWEDEN: 191
+};
 
-const worlds = [
-    {
-        id: 1,
-        hostname: 'localhost',
-        port: 43594,
-        country: 1,
-        activity: 'Example World',
-        members: true,
-        quickChat: false,
-        pvp: false,
-        lootShare: true,
-        players: 0
-    }
-];
+function toTitleCase(str) {
+    return str.replace(
+        /\w\S*/g,
+        (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
+    );
+}
+
+let countries = [];
+for (let i = 0; i < Object.keys(COUNTRY_FLAG).length; i++) {
+    let name = Object.keys(COUNTRY_FLAG)[i]
+    let displayName = toTitleCase(name.replace('_', ' ').toLowerCase());
+    let flag = COUNTRY_FLAG[name];
+
+    countries.push({
+        flag,
+        name: displayName
+    });
+}
+
+let worlds = [];
+for (let i = 0; i < 300; i++) {
+    let id = i + 1;
+    worlds.push(
+        {
+            id,
+            hostname: 'localhost',
+            port: 43594,
+            country: Math.floor(Math.random() * countries.length),
+            activity: Math.random() < 0.25 ? ('Example Activity for World ' + id) : '',
+            members: Math.random() < 0.5,
+            quickChat: Math.random() < 0.25,
+            pvp: Math.random() < 0.25,
+            lootShare: Math.random() < 0.5,
+            players: Math.random() * 2000
+        }
+    );
+}
 
 let worldList = new ByteBuffer();
 let worldListChecksum = 0;
@@ -66,7 +101,7 @@ let worldListChecksum = 0;
 worldList.psmart(countries.length);
 for (let i = 0; i < countries.length; i++) {
     let country = countries[i];
-    worldList.p1(country.flag);
+    worldList.psmart(country.flag);
     worldList.pjstr2(country.name);
 }
 
@@ -101,7 +136,7 @@ for (let i = 0; i < worlds.length; i++) {
     }
 
     worldList.p4(flags);
-    worldList.pjstr2(world.activity);
+    worldList.pjstr2(world.activity); // if there is no activity name, client will fallback to country flag + name
     worldList.pjstr2(world.hostname);
 }
 
