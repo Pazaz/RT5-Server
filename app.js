@@ -90,6 +90,7 @@ for (let i = 0; i < 300; i++) {
             quickChat: Math.random() < 0.25,
             pvp: Math.random() < 0.25,
             lootShare: Math.random() < 0.5,
+            highlight: Math.random() < 0.25,
             players: Math.random() * 2000
         }
     );
@@ -119,6 +120,7 @@ for (let i = 0; i < worlds.length; i++) {
     worldList.p1(world.country);
 
     let flags = 0;
+
     if (world.members) {
         flags |= 0x1;
     }
@@ -133,6 +135,10 @@ for (let i = 0; i < worlds.length; i++) {
 
     if (world.lootShare) {
         flags |= 0x8;
+    }
+
+    if (world.activity && world.highlight) {
+        flags |= 0x10;
     }
 
     worldList.p4(flags);
