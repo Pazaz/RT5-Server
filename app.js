@@ -1,13 +1,16 @@
-import { ByteBuffer } from '#util/ByteBuffer.js';
-import axios from 'axios';
 import net from 'net';
 import fs from 'fs';
+
+import axios from 'axios';
+
+import { ByteBuffer } from '#util/ByteBuffer.js';
+import { fromBase37, toBase37 } from '#util/StringUtils.js';
 
 const OPENRS2_SCOPE = 'runescape';
 const OPENRS2_ID = '259'; // links to rev 578, dated 2009-12-22
 const OPENRS2_API = `https://archive.openrs2.org/caches/${OPENRS2_SCOPE}/${OPENRS2_ID}`;
 
-// Update Server
+//#region Update Server
 
 const JS5_IN = {
     // opcode
@@ -32,7 +35,9 @@ const JS5_OUT = {
     FULL2: 9,
 };
 
-// World List Server
+// #endregion
+
+//#region World List Server
 
 const COUNTRY_FLAG = {
     UNITED_STATES: 0, // fallback flag actually
@@ -159,148 +164,252 @@ const WL_OUT = {
     REJECT: 1
 };
 
-// ----
+//#endregion
+
+const ClientState = {
+    CLOSED: -1,
+    NEW: 0,
+    JS5: 1,
+    WL: 2,
+    GAME: 3
+};
+
+class Client {
+    server = null;
+    socket = null;
+    state = ClientState.NEW;
+
+    constructor(server, socket) {
+        this.server = server;
+        this.socket = socket;
+        this.socket.on('data', (data) => {
+            this.#handleData(new ByteBuffer(data));
+        });
+    }
+
+    #handleData(data) {
+        try {
+            switch (this.state) {
+                case ClientState.NEW:
+                    this.#handleNew(data);
+                    break;
+                case ClientState.JS5:
+                    this.#handleJs5(data);
+                    break;
+                case ClientState.WL:
+                    this.#handleWl(data);
+                    break;
+                case ClientState.GAME:
+                    break;
+                case ClientState.CLOSED:
+                    this.socket.end();
+                    break;
+            }
+        } catch (err) {
+            console.error(err);
+            this.socket.end();
+            this.state = ClientState.CLOSED;
+        }
+    }
+
+    #handleNew(data) {
+        let opcode = data.g1();
+
+        switch (opcode) {
+            case JS5_IN.OPEN: {
+                let clientVersion = data.g4();
+
+                if (clientVersion == 578) {
+                    this.socket.write(Uint8Array.from([JS5_OUT.SUCCESS]));
+                    this.state = ClientState.JS5;
+                } else {
+                    this.socket.write(Uint8Array.from([JS5_OUT.OUT_OF_DATE]));
+                    this.socket.end();
+                    this.state = ClientState.CLOSED;
+                }
+            } break;
+            case WL_IN.OPEN: {
+                let checksum = data.g4b();
+
+                this.socket.write(Uint8Array.from([WL_OUT.SUCCESS]));
+                this.state = ClientState.WL;
+
+                let response = new ByteBuffer();
+                response.p2(0);
+                let start = response.offset;
+
+                response.pbool(true); // encoding a world list update
+                if (checksum != worldListChecksum) {
+                    response.pbool(true); // encoding all information about the world list (countries, size of list, etc.)
+                    response.pdata(worldList);
+                    response.p4(worldListChecksum);
+                } else {
+                    response.pbool(false); // not encoding any world list information, just updating the player counts
+                }
+
+                for (let i = 0; i < worlds.length; i++) {
+                    let world = worlds[i];
+                    response.psmart(world.id - minId);
+                    response.p2(world.players);
+                }
+
+                response.psize2(response.offset - start);
+                this.socket.write(response.raw);
+            } break;
+            case 20: { // registration step 1 (birthdate and country)
+                let day = data.g1();
+                let month = data.g1();
+                let year = data.g2();
+                let country = data.g2();
+
+                this.socket.write(Uint8Array.from([2]));
+            } break;
+            case 21: { // validate username
+                let username = fromBase37(data.g8());
+
+                // success:
+                this.socket.write(Uint8Array.from([2]));
+
+                // suggested names:
+                // let response = new ByteBuffer();
+                // response.p1(21);
+
+                // let names = ['test', 'test2'];
+                // response.p1(names.length);
+                // for (let i = 0; i < names.length; i++) {
+                //     response.p8(toBase37(names[i]));
+                // }
+
+                // this.socket.write(response.raw);
+            } break;
+            case 22: { // registration step 2 (email)
+                let length = data.g2();
+                data = data.gdata(length);
+
+                let revision = data.g2();
+
+                let decrypted = data.rsadec();
+
+                let rsaMagic = decrypted.g1();
+                if (rsaMagic != 10) {
+                    // TODO: read failure
+                }
+
+                let key = [];
+                let optIn = decrypted.g2();
+                let username = fromBase37(decrypted.g8());
+                key.push(decrypted.g4());
+                let password = decrypted.gjstr();
+                key.push(decrypted.g4());
+                let affiliate = decrypted.g2();
+                let day = decrypted.g1();
+                let month = decrypted.g1();
+                key.push(decrypted.g4());
+                let year = decrypted.g2();
+                let country = decrypted.g2();
+                key.push(decrypted.g4());
+
+                let extra = data.gdata();
+                extra.tinydec(key, extra.length);
+                let email = extra.gjstr();
+
+                this.socket.write(Uint8Array.from([2]));
+            } break;
+            default:
+                console.log('Unknown opcode', opcode, data.raw);
+                this.state = -1;
+                break;
+        }
+    }
+
+    #handleJs5(data) {
+        let queue = [];
+
+        while (data.available > 0) {
+            let type = data.g1();
+
+            switch (type) {
+                case JS5_IN.REQUEST:
+                case JS5_IN.PRIORITY_REQUEST: {
+                    let archive = data.g1();
+                    let group = data.g2();
+
+                    queue.push({ type, archive, group });
+                } break;
+                default:
+                    data.seek(3);
+                    break;
+            }
+        }
+
+        // TODO: move this out of the network handler and into a dedicated Js5 queue loop (for all requests)
+        queue.forEach(async (request) => {
+            const { type, archive, group } = request;
+
+            if (!fs.existsSync(`data/cache/${archive}`)) {
+                fs.mkdirSync(`data/cache/${archive}`, { recursive: true });
+            }
+
+            let file;
+            if (!fs.existsSync(`data/cache/${archive}/${group}.dat`)) {
+                file = await axios.get(`${OPENRS2_API}/archives/${archive}/groups/${group}.dat`, { responseType: 'arraybuffer' });
+                file = new Uint8Array(file.data);
+                fs.writeFileSync(`data/cache/${archive}/${group}.dat`, file);
+            } else {
+                file = fs.readFileSync(`data/cache/${archive}/${group}.dat`);
+            }
+
+            if (archive == 255 && group == 255) {
+                // checksum table for all archives
+                let response = new ByteBuffer();
+                response.p1(archive);
+                response.p2(group);
+                response.pdata(file);
+                this.socket.write(response.raw);
+            } else {
+                let compression = file[0];
+                let length = file[1] << 24 | file[2] << 16 | file[3] << 8 | file[4];
+                let realLength = compression != 0 ? length + 4 : length;
+
+                let settings = compression;
+                if (type == JS5_IN.REQUEST) {
+                    settings |= 0x80;
+                }
+
+                let response = ByteBuffer.alloc(8 + realLength + Math.floor(file.length / 512));
+                response.p1(archive);
+                response.p2(group);
+                response.p1(settings);
+                response.p4(length);
+
+                for (let i = 5; i < realLength + 5; i++) {
+                    if ((response.offset % 512) == 0) {
+                        response.p1(0xFF);
+                    }
+
+                    response.p1(file[i]);
+                }
+
+                this.socket.write(response.raw);
+            }
+        });
+    }
+
+    #handleWl(data) {
+    }
+}
 
 class Server {
+    clients = [];
+
     constructor() {
         this.server = net.createServer((socket) => {
             console.log('Connection from', socket.remoteAddress + ':' + socket.remotePort);
-
-            socket.on('data', async (data) => {
-                try {
-                    data = new ByteBuffer(data);
-
-                    if (!socket.state && socket.state != -1) {
-                        let opcode = data.g1();
-
-                        switch (opcode) {
-                            case JS5_IN.OPEN: {
-                                let clientVersion = data.g4();
-
-                                if (clientVersion == 578) {
-                                    socket.write(Uint8Array.from([JS5_OUT.SUCCESS]));
-                                    socket.state = 1;
-                                } else {
-                                    socket.write(Uint8Array.from([JS5_OUT.OUT_OF_DATE]));
-                                    socket.end();
-                                }
-                            } break;
-                            case WL_IN.OPEN: {
-                                let checksum = data.g4b();
-
-                                socket.write(Uint8Array.from([WL_OUT.SUCCESS]));
-                                socket.state = 2;
-
-                                let response = new ByteBuffer();
-                                response.p2(0);
-                                let start = response.offset;
-
-                                response.pbool(true); // encoding a world list update
-                                if (checksum != worldListChecksum) {
-                                    response.pbool(true); // encoding all information about the world list (countries, size of list, etc.)
-                                    response.pdata(worldList);
-                                    response.p4(worldListChecksum);
-                                } else {
-                                    response.pbool(false); // not encoding any world list information, just updating the player counts
-                                }
-
-                                for (let i = 0; i < worlds.length; i++) {
-                                    let world = worlds[i];
-                                    response.psmart(world.id - minId);
-                                    response.p2(world.players);
-                                }
-
-                                response.psize2(response.offset - start);
-                                socket.write(response.raw);
-                            } break;
-                            default:
-                                console.log('Unknown opcode', opcode, data.raw);
-                                socket.state = -1;
-                                break;
-                        }
-                    } else if (socket.state == 1) {
-                        let queue = [];
-
-                        while (data.available > 0) {
-                            let type = data.g1();
-
-                            switch (type) {
-                                case JS5_IN.REQUEST:
-                                case JS5_IN.PRIORITY_REQUEST: {
-                                    let archive = data.g1();
-                                    let group = data.g2();
-
-                                    queue.push({ type, archive, group });
-                                } break;
-                                default:
-                                    data.seek(3);
-                                    break;
-                            }
-                        }
-
-                        queue.forEach(async (request) => {
-                            const { type, archive, group } = request;
-
-                            if (!fs.existsSync(`data/cache/${archive}`)) {
-                                fs.mkdirSync(`data/cache/${archive}`, { recursive: true });
-                            }
-
-                            let file;
-                            if (!fs.existsSync(`data/cache/${archive}/${group}.dat`)) {
-                                file = await axios.get(`${OPENRS2_API}/archives/${archive}/groups/${group}.dat`, { responseType: 'arraybuffer' });
-                                file = new Uint8Array(file.data);
-                                fs.writeFileSync(`data/cache/${archive}/${group}.dat`, file);
-                            } else {
-                                file = fs.readFileSync(`data/cache/${archive}/${group}.dat`);
-                            }
-
-                            if (archive == 255 && group == 255) {
-                                // checksum table for all archives
-                                let response = new ByteBuffer();
-                                response.p1(archive);
-                                response.p2(group);
-                                response.pdata(file);
-                                socket.write(response.raw);
-                            } else {
-                                let compression = file[0];
-                                let length = file[1] << 24 | file[2] << 16 | file[3] << 8 | file[4];
-                                let realLength = compression != 0 ? length + 4 : length;
-
-                                let settings = compression;
-                                if (type == JS5_IN.REQUEST) {
-                                    settings |= 0x80;
-                                }
-
-                                let response = ByteBuffer.alloc(8 + realLength + Math.floor(file.length / 512));
-                                response.p1(archive);
-                                response.p2(group);
-                                response.p1(settings);
-                                response.p4(length);
-
-                                for (let i = 5; i < realLength + 5; i++) {
-                                    if ((response.offset % 512) == 0) {
-                                        response.p1(0xFF);
-                                    }
-
-                                    response.p1(file[i]);
-                                }
-
-                                socket.write(response.raw);
-                            }
-                        });
-                    } else if (socket.state == 2) {
-                        console.log('Received', data.raw);
-                    } else {
-                        socket.end();
-                    }
-                } catch (err) {
-                    console.log(err);
-                    socket.end();
-                }
-            });
+            this.clients.push(new Client(this, socket));
 
             socket.on('end', () => {
                 console.log('Disconnected from', socket.remoteAddress + ':' + socket.remotePort);
+                this.clients.splice(this.clients.findIndex(c => c.socket == socket), 1);
             });
 
             socket.on('error', (err) => {
@@ -317,4 +426,4 @@ class Server {
 }
 
 let server = new Server();
-server.listen(43595);
+server.listen(40001);
