@@ -134,6 +134,11 @@ export class ByteBuffer {
         return this;
     }
 
+    seekTo(offset) {
+        this.offset = offset;
+        return this;
+    }
+
     // read-related functions
 
     slice(begin = this.offset, end = this.length) {
@@ -383,26 +388,16 @@ export class ByteBuffer {
         return (this.g1() - random.nextInt()) & 0xFF;
     }
 
-    gsmart_isaac(random) {
-        let value = this.g1isaac(random);
-        return (value < 128) ? (value) : ((value - 128) << 8 | this.g1isaac(random));
-    }
-
     g1sub() {
         return 128 - this.g1();
     }
 
-    p1isaac(op, random) {
-        this.p1(op + random.nextInt());
+    ig2() {
+        return this.raw[this.offset++] | this.raw[this.offset++] << 8;
     }
 
-    psmart_isaac(value, random) {
-        if (value < 128) {
-            this.p1isaac(value, random);
-        } else {
-            this.p1isaac(value, random);
-            this.p1isaac(value >> 8, random);
-        }
+    p1isaac(op, random) {
+        this.p1(op + random.nextInt());
     }
 
     ip2(value) {
@@ -496,15 +491,3 @@ ByteBuffer.prototype.p1 = writer('setUint8', 1);
 ByteBuffer.prototype.p2 = writer('setUint16', 2);
 ByteBuffer.prototype.p4 = writer('setUint32', 4);
 ByteBuffer.prototype.p8 = writer('setBigUint64', 8);
-
-// let rand = new IsaacRandom([0, 0, 0, 0]);
-// let rand2 = new IsaacRandom([0, 0, 0, 0]);
-
-// let test = new ByteBuffer();
-
-// test.psmart_isaac(32766, rand);
-// test.front();
-// console.log(test);
-
-// let value = test.gsmart_isaac(rand2);
-// console.log(value);

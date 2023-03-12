@@ -202,8 +202,6 @@ export class IsaacRandom {
     }
 
     nextInt() {
-        return 0;
-
         if (this.count-- == 0) {
             this.isaac();
             this.count = IsaacRandom.SIZE - 1;

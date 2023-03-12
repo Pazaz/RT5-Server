@@ -189,12 +189,114 @@ const ClientState = {
     GAME: 4
 };
 
+const ClientProt = {
+    Length: []
+};
+
+for (let i = 0; i < 256; i++) {
+    ClientProt.Length[i] = 0;
+}
+
+ClientProt.Length[0] = 2;
+ClientProt.Length[1] = -1;
+ClientProt.Length[2] = 8;
+ClientProt.Length[3] = 7;
+ClientProt.Length[4] = 8;
+ClientProt.Length[5] = 7;
+ClientProt.Length[6] = 15;
+ClientProt.Length[7] = 4;
+ClientProt.Length[8] = 6;
+ClientProt.Length[9] = 15;
+ClientProt.Length[10] = 8;
+ClientProt.Length[11] = 16;
+ClientProt.Length[12] = 8;
+ClientProt.Length[13] = 16;
+ClientProt.Length[14] = 8;
+ClientProt.Length[15] = -1;
+ClientProt.Length[16] = -1;
+ClientProt.Length[17] = 8;
+ClientProt.Length[18] = -1;
+ClientProt.Length[19] = -1;
+ClientProt.Length[20] = 4;
+ClientProt.Length[21] = 6;
+ClientProt.Length[22] = 7;
+ClientProt.Length[23] = -1;
+ClientProt.Length[24] = -1;
+ClientProt.Length[25] = 2;
+ClientProt.Length[26] = 7;
+ClientProt.Length[27] = 3;
+ClientProt.Length[28] = 3;
+ClientProt.Length[29] = -1;
+ClientProt.Length[30] = -1;
+ClientProt.Length[31] = 3;
+ClientProt.Length[32] = 3;
+ClientProt.Length[33] = 4;
+ClientProt.Length[34] = -1;
+ClientProt.Length[35] = 3;
+ClientProt.Length[36] = 3;
+ClientProt.Length[37] = 6;
+ClientProt.Length[38] = 4;
+ClientProt.Length[39] = 3;
+ClientProt.Length[40] = 7;
+ClientProt.Length[41] = 3;
+ClientProt.Length[42] = -1;
+ClientProt.Length[43] = 8;
+ClientProt.Length[44] = 1;
+ClientProt.Length[45] = 3;
+ClientProt.Length[46] = 2;
+ClientProt.Length[47] = 7;
+ClientProt.Length[48] = 11;
+ClientProt.Length[49] = -1;
+ClientProt.Length[50] = 3;
+ClientProt.Length[51] = 0;
+ClientProt.Length[52] = 12;
+ClientProt.Length[53] = -1;
+ClientProt.Length[54] = 8;
+ClientProt.Length[55] = 0;
+ClientProt.Length[56] = -1;
+ClientProt.Length[57] = 8;
+ClientProt.Length[58] = 2;
+ClientProt.Length[59] = 18;
+ClientProt.Length[60] = -1;
+ClientProt.Length[61] = -1;
+ClientProt.Length[62] = 3;
+ClientProt.Length[63] = 8;
+ClientProt.Length[64] = -1;
+ClientProt.Length[65] = 4;
+ClientProt.Length[66] = 2;
+ClientProt.Length[67] = 4;
+ClientProt.Length[68] = 3;
+ClientProt.Length[69] = 3;
+ClientProt.Length[70] = 3;
+ClientProt.Length[71] = 0;
+ClientProt.Length[72] = 7;
+ClientProt.Length[73] = 7;
+ClientProt.Length[74] = -1;
+ClientProt.Length[75] = 11;
+ClientProt.Length[76] = -1;
+ClientProt.Length[77] = -1;
+ClientProt.Length[78] = 5;
+ClientProt.Length[79] = 7;
+ClientProt.Length[80] = 7;
+ClientProt.Length[81] = 2;
+
 class Client {
     server = null;
     socket = null;
     state = ClientState.NEW;
+
+    netOut = [];
+
     randomIn = null;
     randomOut = null;
+
+    bufferIn = new Uint8Array(30000);
+    bufferInOffset = 0;
+
+    bufferOut = new Uint8Array(30000);
+    bufferOutOffset = 0;
+
+    packetCount = new Uint8Array(256);
 
     constructor(server, socket) {
         this.server = server;
@@ -488,7 +590,127 @@ class Client {
     }
 
     #handleGame(data) {
-        // console.log(data.raw);
+        if (data instanceof ByteBuffer) {
+            data = data.raw;
+        }
+
+        let offset = 0;
+        while (offset < data.length) {
+            let start = offset;
+
+            if (this.randomIn) {
+                data[offset] -= this.randomIn.nextInt();
+            }
+
+            let opcode = data[offset++];
+            let length = ClientProt.Length[opcode];
+            
+            if (length == -1) {
+                length = data[offset++];
+            } else if (length == -2) {
+                length = data[offset++] << 8 | data[offset++];
+            }
+
+            if (length > this.bufferIn.length - this.bufferInOffset) {
+                throw new Error('Packet overflow');
+            }
+
+            if (this.packetCount[opcode] + 1 > 10) {
+                offset += length;
+                continue;
+            }
+
+            this.packetCount[opcode]++;
+
+            let slice = data.slice(start, offset + length);
+            offset += length;
+
+            this.bufferIn.set(slice, this.bufferInOffset);
+            this.bufferInOffset += slice.length;
+        }
+    }
+
+    resetIn() {
+        this.bufferInOffset = 0;
+        this.packetCount.fill(0);
+    }
+
+    decodeIn() {
+        let offset = 0;
+
+        let decoded = [];
+        while (offset < this.bufferInOffset) {
+            let opcode = this.bufferIn[offset++];
+            let length = ClientProt.Length[opcode];
+            if (length == -1) {
+                length = this.bufferIn[offset++];
+            } else if (length == -2) {
+                length = this.bufferIn[offset++] << 8 | this.bufferIn[offset++];
+            }
+
+            decoded.push({
+                id: opcode,
+                data: new ByteBuffer(this.bufferIn.slice(offset, offset + length))
+            });
+
+            offset += length;
+        }
+
+        return decoded;
+    }
+
+    write(data) {
+        if (data instanceof ByteBuffer) {
+            data = data.raw;
+        }
+
+        let offset = 0;
+        let remaining = data.length;
+
+        // pack as much data as we can into a single chunk, then flush and repeat
+        while (remaining > 0) {
+            const untilNextFlush = this.bufferOut.length - this.bufferOutOffset;
+
+            if (remaining > untilNextFlush) {
+                this.bufferOut.set(data.slice(offset, offset + untilNextFlush), this.bufferOutOffset);
+                this.bufferOutOffset += untilNextFlush;
+                this.flush();
+                offset += untilNextFlush;
+                remaining -= untilNextFlush;
+            } else {
+                this.bufferOut.set(data.slice(offset, offset + remaining), this.bufferOutOffset);
+                this.bufferOutOffset += remaining;
+                offset += remaining;
+                remaining = 0;
+            }
+        }
+    }
+
+    flush() {
+        if (this.bufferOutOffset) {
+            this.socket.write(this.bufferOut.slice(0, this.bufferOutOffset));
+            this.bufferOutOffset = 0;
+        }
+    }
+
+    queue(data) {
+        if (data instanceof ByteBuffer) {
+            data = data.raw;
+        }
+
+        this.netOut.push(data);
+    }
+
+    encodeOut() {
+        for (let i = 0; i < this.netOut.length; i++) {
+            let packet = this.netOut[i];
+
+            if (this.randomOut) {
+                packet[0] += this.randomOut.nextInt();
+            }
+
+            this.write(packet);
+        }
     }
 }
 
@@ -499,13 +721,16 @@ class Player {
     loaded = false;
     loading = false;
     appearance = null;
-    updated = false;
+    placement = false;
     verifyId = 1;
 
     id = 1;
     username = '';
     windowMode = 0;
 
+    lastX = -1;
+    lastZ = -1;
+    lastPlane = -1;
     x = 3213; // 2925;
     z = 3433; // 3323;
     plane = 0;
@@ -520,7 +745,7 @@ class Player {
 
             if (this.firstLoad) {
                 let response = new ByteBuffer();
-                response.p1isaac(98, this.client.randomOut);
+                response.p1(98);
                 response.p2(0);
                 let start = response.offset;
 
@@ -528,6 +753,10 @@ class Player {
 
                 response.accessBits();
                 response.pBit(30, this.z | this.x << 14 | this.plane << 28);
+                this.lastX = this.x;
+                this.lastZ = this.z;
+                this.lastPlane = this.plane;
+
                 for (let i = 1; i < 2048; i++) {
                     if (this.id == i) {
                         continue;
@@ -560,19 +789,19 @@ class Player {
                 }
 
                 response.psize2(response.offset - start);
-                this.client.socket.write(response.raw);
+                this.client.queue(response);
             }
 
             if (this.firstLoad) {
                 // send game frame
                 let response = new ByteBuffer();
-                response.p1isaac(93, this.client.randomOut);
+                response.p1(93);
 
                 response.p1(0);
                 response.ip2(this.windowMode == 1 ? 548 : 746); // fixed : resizable
                 response.ip2(this.verifyId++);
 
-                this.client.socket.write(response.raw);
+                this.client.queue(response);
             }
 
             if (this.firstLoad) {
@@ -588,11 +817,12 @@ class Player {
             this.loaded = true;
         }
 
+        // player info
         if (this.loaded) {
             let response = new ByteBuffer();
             let updateBlock = new ByteBuffer();
 
-            response.p1isaac(72, this.client.randomOut);
+            response.p1(72);
             response.p2(0);
             let start = response.offset;
 
@@ -603,7 +833,7 @@ class Player {
             response.pdata(updateBlock);
 
             response.psize2(response.offset - start);
-            this.client.socket.write(response.raw);
+            this.client.queue(response);
         }
     }
 
@@ -612,18 +842,19 @@ class Player {
         // TODO: this is supposed to loop, and "nsn0" is supposed to check against a player flag to skip
         if (nsn0) {
             let needsMaskUpdate = this.appearance == null;
-            let needsUpdate = this.updated || needsMaskUpdate;
+            let needsUpdate = this.placement || needsMaskUpdate;
 
             buffer.pBit(1, needsUpdate ? 1 : 0);
 
             if (needsUpdate) {
                 buffer.pBit(1, needsMaskUpdate ? 1 : 0);
-
                 buffer.pBit(2, 0); // no further update
 
-                // buffer.pBit(2, 3); // teleport
-                // buffer.pBit(1, 1); // full location update
-                // buffer.pBit(30, this.z | this.x << 14 | this.plane << 28);
+                // if (this.placement) {
+                //     buffer.pBit(2, 3); // teleport
+                //     buffer.pBit(1, 1); // full location update
+                //     buffer.pBit(30, this.z | this.x << 14 | this.plane << 28);
+                // }
             }
 
             if (needsMaskUpdate) {
@@ -653,9 +884,9 @@ class Player {
         let buffer = new ByteBuffer();
 
         buffer.p1(0); // flags
-        buffer.p1(1); // title-related
-        buffer.p1(0); // pkIcon
-        buffer.p1(0); // prayerIcon
+        buffer.p1(-1); // title-related
+        buffer.p1(-1); // pkIcon
+        buffer.p1(-1); // prayerIcon
 
         // for (let i = 0; i < 12; i++) {
         //     buffer.p1(0); // body
@@ -700,6 +931,33 @@ class Player {
             buffer.pdata(this.appearance);
         }
     }
+
+    processIn() {
+        let decoded = this.client.decodeIn();
+
+        for (let i = 0; i < decoded.length; i++) {
+            const { id, data } = decoded[i];
+
+            switch (id) {
+                case 78: { // MOVE_GAMECLICK
+                    let ctrlClick = data.g1(); // g1add
+                    let x = data.g2();
+                    let z = data.ig2();
+
+                    this.x = x;
+                    this.z = z;
+
+                    // if (ctrlClick) {
+                    //     this.placement = true;
+                    // }
+                } break;
+                default: {
+                    console.log('Unhandled packet', id, data.length, ClientProt.Length[id]);
+                    break;
+                }
+            }
+        }
+    }
 }
 
 class World {
@@ -718,15 +976,34 @@ class World {
     }
 
     tick() {
+        // console.time('tick');
+        let start = Date.now();
         // read packets
+        this.players.forEach(p => {
+            p.processIn();
+        });
         // npc processing
         // player processing
         this.players.forEach(p => p.tick());
         // game tasks
         // flushing packets
-        // npc aggro etc
+        this.players.forEach(p => {
+            if (p.client.netOut.length) {
+                p.client.encodeOut();
+                p.client.netOut = [];
+            }
 
-        setTimeout(() => this.tick(), 600);
+            p.client.flush();
+            p.client.resetIn();
+
+            p.placement = false;
+        });
+        // npc aggro etc
+        let end = Date.now();
+        // console.timeEnd('tick');
+
+        let delta = 600 - (end - start);
+        setTimeout(() => this.tick(), delta);
     }
 }
 
@@ -736,6 +1013,9 @@ class Server {
 
     constructor() {
         this.server = net.createServer((socket) => {
+            socket.setNoDelay(true);
+            socket.setTimeout(30000);
+
             console.log('Connection from', socket.remoteAddress + ':' + socket.remotePort);
             let client = new Client(this, socket);
             this.clients.push(client);
@@ -744,6 +1024,10 @@ class Server {
                 console.log('Disconnected from', socket.remoteAddress + ':' + socket.remotePort);
                 this.world.removePlayer(client);
                 this.clients.splice(this.clients.findIndex(c => c.socket == socket), 1);
+            });
+
+            socket.on('timeout', () => {
+                socket.end();
             });
 
             socket.on('error', (err) => {
