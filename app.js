@@ -5,10 +5,24 @@ import axios from 'axios';
 
 import { ByteBuffer } from '#util/ByteBuffer.js';
 import { fromBase37, toBase37 } from '#util/StringUtils.js';
+import { IsaacRandom } from '#util/IsaacRandom.js';
 
 const OPENRS2_SCOPE = 'runescape';
 const OPENRS2_ID = '259'; // links to rev 578, dated 2009-12-22
 const OPENRS2_API = `https://archive.openrs2.org/caches/${OPENRS2_SCOPE}/${OPENRS2_ID}`;
+
+if (!fs.existsSync('data/xteas.json')) {
+    console.log('Downloading XTEAs...');
+    axios.get(`${OPENRS2_API}/keys.json`).then((response) => {
+        fs.writeFileSync('data/xteas.json', JSON.stringify(response.data));
+    });
+}
+
+const XTEAS = JSON.parse(fs.readFileSync('data/xteas.json'));
+
+function getXtea(x, z) {
+    return XTEAS.find((xtea) => xtea.mapsquare == (x << 8 | z));
+}
 
 //#region Update Server
 
@@ -135,7 +149,7 @@ for (let i = 0; i < worlds.length; i++) {
     }
 
     if (world.pvp) {
-        flags |= 0x4;
+        // flags |= 0x4;
     }
 
     if (world.lootShare) {
@@ -171,13 +185,16 @@ const ClientState = {
     NEW: 0,
     JS5: 1,
     WL: 2,
-    GAME: 3
+    LOGIN: 3,
+    GAME: 4
 };
 
 class Client {
     server = null;
     socket = null;
     state = ClientState.NEW;
+    randomIn = null;
+    randomOut = null;
 
     constructor(server, socket) {
         this.server = server;
@@ -190,6 +207,9 @@ class Client {
     #handleData(data) {
         try {
             switch (this.state) {
+                case ClientState.CLOSED:
+                    this.socket.end();
+                    break;
                 case ClientState.NEW:
                     this.#handleNew(data);
                     break;
@@ -199,10 +219,11 @@ class Client {
                 case ClientState.WL:
                     this.#handleWl(data);
                     break;
-                case ClientState.GAME:
+                case ClientState.LOGIN:
+                    this.#handleLogin(data);
                     break;
-                case ClientState.CLOSED:
-                    this.socket.end();
+                case ClientState.GAME:
+                    this.#handleGame(data);
                     break;
             }
         } catch (err) {
@@ -256,6 +277,14 @@ class Client {
                 response.psize2(response.offset - start);
                 this.socket.write(response.raw);
             } break;
+            case 14: { // login
+                let response = new ByteBuffer();
+                response.p1(0);
+                response.p8(BigInt(Math.floor(Math.random() * 0xFFFF_FFFF)) << 32n | BigInt(Math.floor(Math.random() * 0xFFFF_FFFF)));
+
+                this.socket.write(response.raw);
+                this.state = ClientState.LOGIN;
+            } break;
             case 20: { // registration step 1 (birthdate and country)
                 let day = data.g1();
                 let month = data.g1();
@@ -287,9 +316,7 @@ class Client {
                 data = data.gdata(length);
 
                 let revision = data.g2();
-
                 let decrypted = data.rsadec();
-
                 let rsaMagic = decrypted.g1();
                 if (rsaMagic != 10) {
                     // TODO: read failure
@@ -396,19 +423,326 @@ class Client {
     }
 
     #handleWl(data) {
+        // no communication
+    }
+
+    #handleLogin(data) {
+        let opcode = data.g1();
+
+        let length = data.g2();
+        data = data.gdata(length);
+
+        let revision = data.g4();
+        let byte1 = data.g1();
+        let windowMode = data.g1();
+        let canvasWidth = data.g2();
+        let canvasHeight = data.g2();
+        let prefInt = data.g1();
+        let uid = data.gdata(24);
+        let settings = data.gjstr();
+        let affiliate = data.g4();
+        let preferences = data.gdata(data.g1());
+        let verifyId = data.g2();
+        let checksums = [];
+        for (let i = 0; i < 29; i++) {
+            checksums.push(data.g4());
+        }
+
+        let decrypted = data.rsadec();
+        let rsaMagic = decrypted.g1();
+        let key = [];
+        for (let i = 0; i < 4; i++) {
+            key.push(decrypted.g4());
+        }
+        let username = fromBase37(decrypted.g8());
+        let password = decrypted.gjstr();
+
+        this.randomIn = new IsaacRandom(key);
+        for (let i = 0; i < 4; i++) {
+            key[i] += 50;
+        }
+        this.randomOut = new IsaacRandom(key);
+
+        let player = new Player(this);
+        player.id = 1;
+        player.windowMode = windowMode;
+        player.username = username;
+
+        let response = new ByteBuffer();
+        response.p1(2); // success
+
+        response.p1(0); // staff mod level
+        response.p1(0); // player mod level
+        response.pbool(false); // player underage
+        response.pbool(false); // parentalChatConsent
+        response.pbool(false); // parentalAdvertConsent
+        response.pbool(false); // mapQuickChat
+        response.p2(player.id); // selfId
+        response.pbool(false); //MouseRecorder
+        response.pbool(true); // mapMembers
+
+        this.socket.write(response.raw);
+        this.state = ClientState.GAME;
+
+        this.server.world.addPlayer(player);
+    }
+
+    #handleGame(data) {
+        // console.log(data.raw);
+    }
+}
+
+class Player {
+    client = null;
+
+    firstLoad = true;
+    loaded = false;
+    loading = false;
+    appearance = null;
+    updated = false;
+    verifyId = 1;
+
+    id = 1;
+    username = '';
+    windowMode = 0;
+
+    x = 3213; // 2925;
+    z = 3433; // 3323;
+    plane = 0;
+
+    constructor(client) {
+        this.client = client;
+    }
+
+    tick() {
+        if (!this.loaded && !this.loading) {
+            this.loading = true;
+
+            if (this.firstLoad) {
+                let response = new ByteBuffer();
+                response.p1isaac(98, this.client.randomOut);
+                response.p2(0);
+                let start = response.offset;
+
+                //
+
+                response.accessBits();
+                response.pBit(30, this.z | this.x << 14 | this.plane << 28);
+                for (let i = 1; i < 2048; i++) {
+                    if (this.id == i) {
+                        continue;
+                    }
+
+                    response.pBit(18, 0);
+                }
+                response.accessBytes();
+
+                // REBUILD_NORMAL
+
+                response.ip2(this.x >> 3);
+                response.p2(this.z >> 3);
+                response.p1(0); // map size?
+                response.p1neg(0);
+
+                for (let mapsquareX = ((this.x >> 3) - 6) >> 3; mapsquareX <= ((this.x >> 3) + 6) >> 3; mapsquareX++) {
+                    for (let mapsquareZ = ((this.z >> 3) - 6) >> 3; mapsquareZ <= ((this.z >> 3) + 6) >> 3; mapsquareZ++) {
+                        let xtea = getXtea(mapsquareX, mapsquareZ);
+                        if (xtea) {
+                            for (let i = 0; i < xtea.key.length; i++) {
+                                response.p4(xtea.key[i]);
+                            }
+                        } else {
+                            for (let i = 0; i < 4; i++) {
+                                response.p4(0);
+                            }
+                        }
+                    }
+                }
+
+                response.psize2(response.offset - start);
+                this.client.socket.write(response.raw);
+            }
+
+            if (this.firstLoad) {
+                // send game frame
+                let response = new ByteBuffer();
+                response.p1isaac(93, this.client.randomOut);
+
+                response.p1(0);
+                response.ip2(this.windowMode == 1 ? 548 : 746); // fixed : resizable
+                response.ip2(this.verifyId++);
+
+                this.client.socket.write(response.raw);
+            }
+
+            if (this.firstLoad) {
+                // TODO: send chatbox/varps
+            }
+
+            if (this.firstLoad) {
+                // TODO: send tabs/varps
+            }
+
+            this.firstLoad = false;
+            this.loading = false;
+            this.loaded = true;
+        }
+
+        if (this.loaded) {
+            let response = new ByteBuffer();
+            let updateBlock = new ByteBuffer();
+
+            response.p1isaac(72, this.client.randomOut);
+            response.p2(0);
+            let start = response.offset;
+
+            this.processActivePlayers(response, updateBlock, true);
+            this.processActivePlayers(response, updateBlock, false);
+            this.processInactivePlayers(response, updateBlock, true);
+            this.processInactivePlayers(response, updateBlock, false);
+            response.pdata(updateBlock);
+
+            response.psize2(response.offset - start);
+            this.client.socket.write(response.raw);
+        }
+    }
+
+    processActivePlayers(buffer, updateBlock, nsn0) {
+        buffer.accessBits();
+        // TODO: this is supposed to loop, and "nsn0" is supposed to check against a player flag to skip
+        if (nsn0) {
+            let needsMaskUpdate = this.appearance == null;
+            let needsUpdate = this.updated || needsMaskUpdate;
+
+            buffer.pBit(1, needsUpdate ? 1 : 0);
+
+            if (needsUpdate) {
+                buffer.pBit(1, needsMaskUpdate ? 1 : 0);
+
+                buffer.pBit(2, 0); // no further update
+
+                // buffer.pBit(2, 3); // teleport
+                // buffer.pBit(1, 1); // full location update
+                // buffer.pBit(30, this.z | this.x << 14 | this.plane << 28);
+            }
+
+            if (needsMaskUpdate) {
+                this.appendUpdateBlock(updateBlock);
+            }
+        }
+        buffer.accessBytes();
+    }
+
+    processInactivePlayers(buffer, updateBlock, nsn2) {
+        buffer.accessBits();
+        // TODO: "nsn2" is supposed to check against a player flag to skip
+        if (nsn2) {
+            for (let i = 1; i < 2048; i++) {
+                if (this.id == i) {
+                    continue;
+                }
+
+                buffer.pBit(1, 0);
+                buffer.pBit(2, 0);
+            }
+        }
+        buffer.accessBytes();
+    }
+
+    generateAppearance() {
+        let buffer = new ByteBuffer();
+
+        buffer.p1(0); // flags
+        buffer.p1(1); // title-related
+        buffer.p1(0); // pkIcon
+        buffer.p1(0); // prayerIcon
+
+        // for (let i = 0; i < 12; i++) {
+        //     buffer.p1(0); // body
+        // }
+
+        // hat, cape, amulet, weapon, chest, shield, arms, legs, hair, wrists, hands, feet, beard
+        let body = [ -1, -1, -1, -1, 18, -1, 26, 36, 0, 33, 42, 10 ];
+        for (let i = 0; i < body.length; i++) {
+            if (body[i] == -1) {
+                buffer.p1(0);
+            } else {
+                buffer.p2(body[i] | 0x100);
+            }
+        }
+
+        for (let i = 0; i < 5; i++) {
+            buffer.p1(0); // color
+        }
+
+        buffer.p2(1426); // bas id
+        buffer.pjstr(this.username);
+        buffer.p1(3); // combat level
+        buffer.p2(27); // total level
+        buffer.p1(0); // sound radius
+
+        this.appearance = new ByteBuffer();
+        this.appearance.ipdata(buffer);
+    }
+
+    appendUpdateBlock(buffer) {
+        let flags = 0;
+
+        if (!this.appearance) {
+            this.generateAppearance();
+            flags |= 0x1;
+        }
+
+        buffer.p1(flags);
+
+        if (flags & 0x1) {
+            buffer.p1sub(this.appearance.length);
+            buffer.pdata(this.appearance);
+        }
+    }
+}
+
+class World {
+    constructor() {
+        this.players = [];
+
+        this.tick();
+    }
+
+    addPlayer(player) {
+        this.players.push(player);
+    }
+
+    removePlayer(client) {
+        this.players.splice(this.players.findIndex(p => p.client == client), 1);
+    }
+
+    tick() {
+        // read packets
+        // npc processing
+        // player processing
+        this.players.forEach(p => p.tick());
+        // game tasks
+        // flushing packets
+        // npc aggro etc
+
+        setTimeout(() => this.tick(), 600);
     }
 }
 
 class Server {
     clients = [];
+    world = new World();
 
     constructor() {
         this.server = net.createServer((socket) => {
             console.log('Connection from', socket.remoteAddress + ':' + socket.remotePort);
-            this.clients.push(new Client(this, socket));
+            let client = new Client(this, socket);
+            this.clients.push(client);
 
             socket.on('end', () => {
                 console.log('Disconnected from', socket.remoteAddress + ':' + socket.remotePort);
+                this.world.removePlayer(client);
                 this.clients.splice(this.clients.findIndex(c => c.socket == socket), 1);
             });
 
@@ -422,6 +756,9 @@ class Server {
         this.server.listen(port, () => {
             console.log('Server listening on port ' + port);
         });
+    }
+
+    tick() {
     }
 }
 

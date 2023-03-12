@@ -2,6 +2,7 @@ import fs from 'fs';
 
 import crc32 from 'crc-32';
 import forge from 'node-forge';
+import { IsaacRandom } from '#util/IsaacRandom.js';
 
 const RSA = forge.pki.privateKeyFromPem(fs.readFileSync('data/private.pem'));
 
@@ -217,7 +218,7 @@ export class ByteBuffer {
         for (let i = 0; i < str.length; ++i) {
             this.p1(str.charCodeAt(i));
         }
-        this.p1(10);
+        this.p1(0);
         return this;
     }
 
@@ -263,7 +264,7 @@ export class ByteBuffer {
         this.bitOffset = this.offset << 3;
     }
 
-    setBits(n, value) {
+    pBit(n, value) {
         let bytePos = this.bitOffset >>> 3;
         let remaining = 8 - (this.bitOffset & 7);
         this.bitOffset += n;
@@ -294,7 +295,7 @@ export class ByteBuffer {
         // this.accessBytes(); // just in case mixed bit/byte access occurs
     }
 
-    getBits(n) {
+    gBit(n) {
         let bytePos = this.bitOffset >> 3;
         let remaining = 8 - (this.bitOffset & 7);
         let value = 0;
@@ -377,6 +378,55 @@ export class ByteBuffer {
 
         return decrypted;
     }
+
+    g1isaac(random) {
+        return (this.g1() - random.nextInt()) & 0xFF;
+    }
+
+    gsmart_isaac(random) {
+        let value = this.g1isaac(random);
+        return (value < 128) ? (value) : ((value - 128) << 8 | this.g1isaac(random));
+    }
+
+    g1sub() {
+        return 128 - this.g1();
+    }
+
+    p1isaac(op, random) {
+        this.p1(op + random.nextInt());
+    }
+
+    psmart_isaac(value, random) {
+        if (value < 128) {
+            this.p1isaac(value, random);
+        } else {
+            this.p1isaac(value, random);
+            this.p1isaac(value >> 8, random);
+        }
+    }
+
+    ip2(value) {
+        this.p1(value);
+        this.p1(value >> 8);
+    }
+
+    p1neg(value) {
+        this.p1(-value);
+    }
+
+    p1sub(value) {
+        this.p1(128 - value);
+    }
+
+    ipdata(data) {
+        if (data instanceof ByteBuffer) {
+            data = data.raw;
+        }
+
+        for (let i = data.length - 1; i >= 0; i--) {
+            this.p1(data[i]);
+        }
+    }
 }
 
 const reader = function (method, bytes) {
@@ -446,3 +496,15 @@ ByteBuffer.prototype.p1 = writer('setUint8', 1);
 ByteBuffer.prototype.p2 = writer('setUint16', 2);
 ByteBuffer.prototype.p4 = writer('setUint32', 4);
 ByteBuffer.prototype.p8 = writer('setBigUint64', 8);
+
+// let rand = new IsaacRandom([0, 0, 0, 0]);
+// let rand2 = new IsaacRandom([0, 0, 0, 0]);
+
+// let test = new ByteBuffer();
+
+// test.psmart_isaac(32766, rand);
+// test.front();
+// console.log(test);
+
+// let value = test.gsmart_isaac(rand2);
+// console.log(value);

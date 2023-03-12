@@ -4,7 +4,7 @@
   "description": "",
   "type": "module",
   "scripts": {
-    "start": "nodemon --ignore dump app.js"
+    "start": "nodemon --ignore data --ignore dump app.js"
   },
   "imports": {
     "#util/*": "./util/*"

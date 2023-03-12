@@ -2,4 +2,6 @@ node_modules/
 package-lock.json
 
 data/cache/
+data/xteas.json
+
 dump/
