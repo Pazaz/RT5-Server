@@ -88,7 +88,7 @@ export default class Client {
                     this.state = ClientState.CLOSED;
                 }
             } break;
-            case TitleProt.WORLDLIST: {
+            case TitleProt.WORLDLIST_FETCH: {
                 let checksum = data.g4b();
 
                 this.socket.write(Uint8Array.from([WlProtOut.SUCCESS]));
@@ -117,7 +117,7 @@ export default class Client {
                 response.psize2(response.offset - start);
                 this.socket.write(response.raw);
             } break;
-            case 14: { // login
+            case TitleProt.WORLD_HANDSHAKE: { // login
                 let response = new ByteBuffer();
                 response.p1(0);
                 response.p8(BigInt(Math.floor(Math.random() * 0xFFFF_FFFF)) << 32n | BigInt(Math.floor(Math.random() * 0xFFFF_FFFF)));
@@ -125,7 +125,7 @@ export default class Client {
                 this.socket.write(response.raw);
                 this.state = ClientState.LOGIN;
             } break;
-            case 20: { // registration step 1 (birthdate and country)
+            case TitleProt.CREATE_LOG_PROGRESS: {
                 let day = data.g1();
                 let month = data.g1();
                 let year = data.g2();
@@ -133,7 +133,7 @@ export default class Client {
 
                 this.socket.write(Uint8Array.from([2]));
             } break;
-            case 21: { // validate username
+            case TitleProt.CREATE_CHECK_NAME: {
                 let username = fromBase37(data.g8());
 
                 // success:
@@ -151,7 +151,7 @@ export default class Client {
 
                 // this.socket.write(response.raw);
             } break;
-            case 22: { // registration step 2 (email)
+            case TitleProt.CREATE_ACCOUNT: {
                 let length = data.g2();
                 data = data.gdata(length);
 
@@ -181,6 +181,34 @@ export default class Client {
                 let email = extra.gjstr();
 
                 this.socket.write(Uint8Array.from([2]));
+
+                // 0 - unexpected response
+                // 1 - could not display video ad
+                // 2 - success
+                // 3 - invalid username/password
+                // 4 - account is banned
+                // 5 - account is logged in
+                // 6 - client out of date
+                // 7 - world is full
+                // 8 - login server offline
+                // 9 - too many connections
+                // 10 - bad session id
+                // 11 - weak password
+                // 12 - f2p account, p2p world
+                // 13 - could not login
+                // 14 - server is updating
+                // 15 - reconnecting
+                // 16 - too many login attempts
+                // 17 - p2p area, f2p world
+                // 18 - account locked
+                // 19 - members beta
+                // 20 - invalid login server
+                // 21 - moving worlds
+                // 22 - malformed login packet
+                // 23 - no reply from login server
+                // 24 - error loading profile
+                // 26 - mac address banned
+                // 27 - service unavailable
             } break;
             default:
                 console.log('Unknown opcode', opcode, data.raw);

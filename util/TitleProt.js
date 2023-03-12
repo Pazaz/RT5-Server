@@ -5,5 +5,9 @@ export default {
 
     JS5_OPEN: 15,
 
-    WORLDLIST: 23,
+    CREATE_LOG_PROGRESS: 20, // complete guess
+    CREATE_CHECK_NAME: 21,
+    CREATE_ACCOUNT: 22,
+
+    WORLDLIST_FETCH: 23,
 };

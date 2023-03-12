@@ -16,6 +16,10 @@ export default class Server {
             let client = new Client(this, socket);
             this.clients.push(client);
 
+            socket.on('error', (err) => {
+                console.log(err);
+            });
+
             socket.on('end', () => {
                 console.log('Disconnected from', socket.remoteAddress + ':' + socket.remotePort);
                 this.world.removePlayer(client);

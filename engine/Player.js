@@ -227,20 +227,20 @@ export default class Player {
             const { id, data } = decoded[i];
 
             switch (id) {
-                case 78: { // MOVE_GAMECLICK
-                    let ctrlClick = data.g1(); // g1add
-                    let x = data.g2();
-                    let z = data.ig2();
+                // case 78: { // MOVE_GAMECLICK
+                //     let ctrlClick = data.g1(); // g1add
+                //     let x = data.g2();
+                //     let z = data.ig2();
 
-                    this.x = x;
-                    this.z = z;
+                //     this.x = x;
+                //     this.z = z;
 
-                    // if (ctrlClick) {
-                    //     this.placement = true;
-                    // }
-                } break;
+                //     // if (ctrlClick) {
+                //     //     this.placement = true;
+                //     // }
+                // } break;
                 default: {
-                    console.log('Unhandled packet', id, data.length, ClientProt.Length[id]);
+                    console.log('Unhandled packet', ClientProt[id] ?? id);
                     break;
                 }
             }

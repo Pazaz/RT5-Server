@@ -1,6 +1,27 @@
 const ClientProt = {
-    Length: []
+    Length: [],
+
+    EVENT_CAMERA_POSITION: 7,
+    WINDOW_STATUS: 8, // todo: confirm
+    SOUND_SONGEND: 20,
+    EVENT_KEYBOARD: 23,
+    TRANSMITVAR_VERIFYID: 25, // todo: confirm
+    EVENT_MOUSE_CLICK: 37,
+    EVENT_APPLET_FOCUS: 44,
+    MOVE_MINIMAPCLICK: 59,
+    MESSAGE_PUBLIC: 60,
+    EVENT_MOUSE_MOVE: 61,
+    GET_EXAMINE: 66, // not an official name
+    NO_TIMEOUT: 71,
+    CLIENT_CHEAT: 76,
+    MOVE_GAMECLICK: 78,
+    IDLE_TIMER: 81, // not an official name
 };
+
+// reverse-lookup
+for (let i = 1; i < Object.keys(ClientProt).length; i++) {
+    ClientProt[Object.values(ClientProt)[i]] = Object.keys(ClientProt)[i];
+}
 
 for (let i = 0; i < 128; i++) {
     ClientProt.Length[i] = 0;
