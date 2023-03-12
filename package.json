@@ -7,6 +7,8 @@
     "start": "nodemon --ignore data --ignore dump app.js"
   },
   "imports": {
+    "#engine/*": "./engine/*",
+    "#network/*": "./network/*",
     "#util/*": "./util/*"
   },
   "devDependencies": {
