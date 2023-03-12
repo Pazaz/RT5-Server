@@ -22,16 +22,32 @@ export default class Server {
 
             socket.on('end', () => {
                 console.log('Disconnected from', socket.remoteAddress + ':' + socket.remotePort);
-                this.world.removePlayer(client);
-                this.clients.splice(this.clients.findIndex(c => c.socket == socket), 1);
+
+                let index = this.clients.findIndex(c => c.socket == socket);
+                if (index != -1) {
+                    this.world.removePlayer(client);
+                    this.clients.splice(index, 1);
+                }
             });
 
             socket.on('timeout', () => {
-                socket.end();
+                socket.destroy();
+
+                let index = this.clients.findIndex(c => c.socket == socket);
+                if (index != -1) {
+                    this.world.removePlayer(client);
+                    this.clients.splice(index, 1);
+                }
             });
 
             socket.on('error', (err) => {
                 socket.destroy();
+
+                let index = this.clients.findIndex(c => c.socket == socket);
+                if (index != -1) {
+                    this.world.removePlayer(client);
+                    this.clients.splice(index, 1);
+                }
             });
         });
     }

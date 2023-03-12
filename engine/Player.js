@@ -6,6 +6,7 @@ export default class Player {
     client = null;
 
     firstLoad = true;
+    reconnecting = false;
     loaded = false;
     loading = false;
     appearance = null;
@@ -31,7 +32,29 @@ export default class Player {
         if (!this.loaded && !this.loading) {
             this.loading = true;
 
-            if (this.firstLoad) {
+            if (this.reconnecting) {
+                let response = new ByteBuffer();
+                response.p2(0);
+                let start = response.offset;
+
+                response.accessBits();
+                response.pBit(30, this.z | this.x << 14 | this.plane << 28);
+                this.lastX = this.x;
+                this.lastZ = this.z;
+                this.lastPlane = this.plane;
+
+                for (let i = 1; i < 2048; i++) {
+                    if (this.id == i) {
+                        continue;
+                    }
+
+                    response.pBit(18, 0);
+                }
+                response.accessBytes();
+
+                response.psize2(response.offset - start);
+                this.client.queue(response, false);
+            } else if (this.firstLoad) {
                 let response = new ByteBuffer();
                 response.p1(98);
                 response.p2(0);

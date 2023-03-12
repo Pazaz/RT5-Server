@@ -324,21 +324,26 @@ export default class Client {
 
         let player = new Player(this);
         player.id = 1;
+        if (opcode == TitleProt.WORLD_RECONNECT) {
+            player.reconnecting = true;
+        }
         player.windowMode = windowMode;
         player.username = username;
 
         let response = new ByteBuffer();
-        response.p1(2); // success
+        response.p1(opcode == TitleProt.WORLD_RECONNECT ? 15 : 2);
 
-        response.p1(0); // staff mod level
-        response.p1(0); // player mod level
-        response.pbool(false); // player underage
-        response.pbool(false); // parentalChatConsent
-        response.pbool(false); // parentalAdvertConsent
-        response.pbool(false); // mapQuickChat
-        response.p2(player.id); // selfId
-        response.pbool(false); //MouseRecorder
-        response.pbool(true); // mapMembers
+        if (opcode == TitleProt.WORLD_CONNECT) {
+            response.p1(0); // staff mod level
+            response.p1(0); // player mod level
+            response.pbool(false); // player underage
+            response.pbool(false); // parentalChatConsent
+            response.pbool(false); // parentalAdvertConsent
+            response.pbool(false); // mapQuickChat
+            response.p2(player.id); // selfId
+            response.pbool(false); //MouseRecorder
+            response.pbool(true); // mapMembers
+        }
 
         this.socket.write(response.raw);
         this.state = ClientState.GAME;
@@ -450,23 +455,23 @@ export default class Client {
         }
     }
 
-    queue(data) {
+    queue(data, encrypt = true) {
         if (data instanceof ByteBuffer) {
             data = data.raw;
         }
 
-        this.netOut.push(data);
+        this.netOut.push({ data, encrypt });
     }
 
     encodeOut() {
         for (let i = 0; i < this.netOut.length; i++) {
             let packet = this.netOut[i];
 
-            if (this.randomOut) {
-                packet[0] += this.randomOut.nextInt();
+            if (this.randomOut && packet.encrypt) {
+                packet.data[0] += this.randomOut.nextInt();
             }
 
-            this.write(packet);
+            this.write(packet.data);
         }
     }
 }

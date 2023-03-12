@@ -3,11 +3,14 @@ const ClientProt = {
 
     EVENT_CAMERA_POSITION: 7,
     WINDOW_STATUS: 8, // todo: confirm
+    CLICKWORLDMAP: 12, // todo: confirm
     SOUND_SONGEND: 20,
     EVENT_KEYBOARD: 23,
     TRANSMITVAR_VERIFYID: 25, // todo: confirm
+    EVENT_FRAME_MAP_LOADED: 33, // not an official name
     EVENT_MOUSE_CLICK: 37,
     EVENT_APPLET_FOCUS: 44,
+    MAP_BUILD_COMPLETE: 55, // todo: confirm
     MOVE_MINIMAPCLICK: 59,
     MESSAGE_PUBLIC: 60,
     EVENT_MOUSE_MOVE: 61,
