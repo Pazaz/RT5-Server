@@ -1,7 +1,6 @@
 # What is this?
 
-This is a small reference server to be able to load [RT5-Client](https://github.com/Pazaz/RT5-Client) and describe the process involved.  
-This does not have any game logic or world simulation, and will not go past the title screen.
+This is a small reference server to be able to load [RT5-Client](https://github.com/Pazaz/RT5-Client) and describe the process involved.
 
 ## How do I run it?
 
@@ -17,7 +16,7 @@ Client:
 ```bash
 git clone https://github.com/Pazaz/RT5-Client.git
 cd RT5-Client
-.\gradlew run --args="1 live english game0"
+.\gradlew run
 ```
 
 # Credits
