@@ -258,7 +258,7 @@ export default class Client {
                 let realLength = compression != 0 ? length + 4 : length;
 
                 let settings = compression;
-                if (type == JS5_IN.REQUEST) {
+                if (type == Js5ProtIn.REQUEST) {
                     settings |= 0x80;
                 }
 

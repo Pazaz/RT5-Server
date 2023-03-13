@@ -16,6 +16,7 @@ const ClientProt = {
     EVENT_MOUSE_MOVE: 61,
     GET_EXAMINE: 66, // not an official name
     NO_TIMEOUT: 71,
+    OPLOC1: 73,
     CLIENT_CHEAT: 76,
     MOVE_GAMECLICK: 78,
     IDLE_TIMER: 81, // not an official name

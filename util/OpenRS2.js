@@ -4,6 +4,8 @@ import axios from 'axios';
 
 const OPENRS2_SCOPE = 'runescape';
 const OPENRS2_ID = '259'; // links to rev 578, dated 2009-12-22
+// const OPENRS2_ID = '671'; // links to rev 578, dated 2010-01-18
+// const OPENRS2_ID = '516'; // links to rev 578, dated 2010-01-22
 const OPENRS2_API = `https://archive.openrs2.org/caches/${OPENRS2_SCOPE}/${OPENRS2_ID}`;
 
 if (!fs.existsSync('data/xteas.json')) {
@@ -11,6 +13,18 @@ if (!fs.existsSync('data/xteas.json')) {
     axios.get(`${OPENRS2_API}/keys.json`).then((response) => {
         fs.writeFileSync('data/xteas.json', JSON.stringify(response.data));
     });
+}
+
+if (!fs.existsSync(`data/cache`) || !fs.existsSync(`data/cache/openrs2id.txt`)) {
+    fs.mkdirSync(`data/cache`, { recursive: true });
+    fs.writeFileSync('data/cache/openrs2id.txt', OPENRS2_ID);
+}
+
+if (fs.readFileSync('data/cache/openrs2id.txt', 'utf8') != OPENRS2_ID) {
+    console.log('OpenRS2 ID changed, clearing cache...');
+    fs.rmSync('data/cache', { recursive: true, force: true });
+    fs.mkdirSync(`data/cache`, { recursive: true });
+    fs.writeFileSync('data/cache/openrs2id.txt', OPENRS2_ID);
 }
 
 const XTEAS = JSON.parse(fs.readFileSync('data/xteas.json'));
