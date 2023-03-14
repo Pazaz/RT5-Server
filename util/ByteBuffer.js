@@ -405,6 +405,11 @@ export class ByteBuffer {
         this.p1(value >> 8);
     }
 
+    p2add(value) {
+        this.p1(value >> 8);
+        this.p1(value + 128);
+    }
+
     p1neg(value) {
         this.p1(-value);
     }

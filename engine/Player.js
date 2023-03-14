@@ -103,23 +103,26 @@ export default class Player {
             }
 
             if (this.firstLoad) {
-                // send game frame
-                let response = new ByteBuffer();
-                response.p1(93);
-
-                response.p1(0);
-                response.ip2(this.windowMode == 1 ? 548 : 746); // fixed : resizable
-                response.ip2(this.verifyId++);
-
-                this.client.queue(response);
-            }
-
-            if (this.firstLoad) {
-                // TODO: send chatbox/varps
-            }
-
-            if (this.firstLoad) {
-                // TODO: send tabs/varps
+                this.openGameFrame(this.isClientResizable() ? 746 : 548); // fixed : resizable
+                this.openChatbox(752);
+                
+                this.openTab(0, 884);
+                this.openTab(1, 320);
+                this.openTab(2, 190);
+                this.openTab(3, 259);
+                this.openTab(4, 149);
+                this.openTab(5, 387);
+                this.openTab(6, 271);
+                this.openTab(7, 192);
+                this.openTab(8, 891);
+                this.openTab(9, 550);
+                this.openTab(10, 551);
+                this.openTab(11, 589);
+                this.openTab(12, 261);
+                this.openTab(13, 464);
+                this.openTab(14, 187);
+                this.openTab(15, 34);
+                this.openTab(16, 182);
             }
 
             this.firstLoad = false;
@@ -145,6 +148,11 @@ export default class Player {
             response.psize2(response.offset - start);
             this.client.queue(response);
         }
+    }
+
+    isClientResizable() {
+        // 1 = fixed, 2 = resizable, 3 = fullscreen
+        return this.windowMode > 1;
     }
 
     processActivePlayers(buffer, updateBlock, nsn0) {
@@ -279,11 +287,52 @@ export default class Player {
         }
     }
 
-    // ----
+    // ---- events
+
+    openChatbox(interfaceId) {
+        if (interfaceId == 752) {
+            this.openInterface(this.isClientResizable() ? 746 : 548, this.isClientResizable() ? 15 : 20, 751, 3);
+            this.openInterface(this.isClientResizable() ? 746 : 548, this.isClientResizable() ? 18 : 142, 752, 3);
+
+            if (this.isClientResizable()) {
+                this.openInterface(752, 9, 137, 3);
+            }
+        }
+    }
+
+    openTab(tabId, interfaceId) {
+        this.openInterface(this.isClientResizable() ? 746 : 548, (this.isClientResizable() ? 33 : 152) + tabId, interfaceId, 3);
+    }
+
+    // ---- encoders
 
     logout() {
         let response = new ByteBuffer();
         response.p1(58);
+        this.client.queue(response);
+    }
+
+    openGameFrame(interfaceId) {
+        let response = new ByteBuffer();
+        response.p1(93);
+
+        response.p1(0);
+        response.ip2(interfaceId);
+        response.ip2(this.verifyId++);
+
+        this.client.queue(response);
+    }
+
+    openInterface(windowId, componentId, interfaceId, flags) {
+        let response = new ByteBuffer();
+        response.p1(52);
+
+        response.p2add(this.verifyId++);
+        response.p1sub(flags);
+        response.ip2(componentId);
+        response.ip2(windowId);
+        response.p2(interfaceId);
+
         this.client.queue(response);
     }
 }

@@ -3,7 +3,7 @@ const ClientProt = {
 
     EVENT_CAMERA_POSITION: 7,
     WINDOW_STATUS: 8, // todo: confirm
-    CLICKWORLDMAP: 12, // todo: confirm
+    IF_BUTTON: 12, // todo: confirm
     SOUND_SONGEND: 20,
     EVENT_KEYBOARD: 23,
     TRANSMITVAR_VERIFYID: 25, // todo: confirm
