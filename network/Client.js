@@ -27,10 +27,9 @@ export default class Client {
     randomIn = null;
     randomOut = null;
 
-    bufferIn = new Uint8Array(30000);
+    player = null;
+    bufferStart = 0;
     bufferInOffset = 0;
-
-    bufferOut = new Uint8Array(30000);
     bufferOutOffset = 0;
 
     packetCount = new Uint8Array(256);
@@ -329,6 +328,8 @@ export default class Client {
         }
         player.windowMode = windowMode;
         player.username = username;
+        this.player = player;
+        this.bufferStart = this.player.id * 30000;
 
         let response = new ByteBuffer();
         response.p1(opcode == TitleProt.WORLD_RECONNECT ? 15 : 2);
@@ -373,8 +374,8 @@ export default class Client {
                 length = data[offset++] << 8 | data[offset++];
             }
 
-            if (length > this.bufferIn.length - this.bufferInOffset) {
-                throw new Error('Packet overflow');
+            if (length > 30000 - this.bufferInOffset) {
+                throw new Error('Packet overflow for this tick');
             }
 
             if (this.packetCount[opcode] + 1 > 10) {
@@ -387,7 +388,7 @@ export default class Client {
             let slice = data.slice(start, offset + length);
             offset += length;
 
-            this.bufferIn.set(slice, this.bufferInOffset);
+            this.server.bufferIn.set(slice, this.bufferStart + this.bufferInOffset);
             this.bufferInOffset += slice.length;
         }
     }
@@ -402,17 +403,17 @@ export default class Client {
 
         let decoded = [];
         while (offset < this.bufferInOffset) {
-            let opcode = this.bufferIn[offset++];
+            let opcode = this.server.bufferIn[this.bufferStart + offset++];
             let length = ClientProt.Length[opcode];
             if (length == -1) {
-                length = this.bufferIn[offset++];
+                length = this.server.bufferIn[this.bufferStart + offset++];
             } else if (length == -2) {
-                length = this.bufferIn[offset++] << 8 | this.bufferIn[offset++];
+                length = this.server.bufferIn[this.bufferStart + offset++] << 8 | this.server.bufferIn[this.bufferStart + offset++];
             }
 
             decoded.push({
                 id: opcode,
-                data: new ByteBuffer(this.bufferIn.slice(offset, offset + length))
+                data: new ByteBuffer(this.server.bufferIn.slice(this.bufferStart + offset, this.bufferStart + offset + length))
             });
 
             offset += length;
@@ -431,16 +432,16 @@ export default class Client {
 
         // pack as much data as we can into a single chunk, then flush and repeat
         while (remaining > 0) {
-            const untilNextFlush = this.bufferOut.length - this.bufferOutOffset;
+            const untilNextFlush = 30000 - this.bufferOutOffset;
 
             if (remaining > untilNextFlush) {
-                this.bufferOut.set(data.slice(offset, offset + untilNextFlush), this.bufferOutOffset);
+                this.server.bufferOut.set(data.slice(offset, offset + untilNextFlush), this.bufferStart + this.bufferOutOffset);
                 this.bufferOutOffset += untilNextFlush;
                 this.flush();
                 offset += untilNextFlush;
                 remaining -= untilNextFlush;
             } else {
-                this.bufferOut.set(data.slice(offset, offset + remaining), this.bufferOutOffset);
+                this.server.bufferOut.set(data.slice(offset, offset + remaining), this.bufferStart + this.bufferOutOffset);
                 this.bufferOutOffset += remaining;
                 offset += remaining;
                 remaining = 0;
@@ -450,7 +451,7 @@ export default class Client {
 
     flush() {
         if (this.bufferOutOffset) {
-            this.socket.write(this.bufferOut.slice(0, this.bufferOutOffset));
+            this.socket.write(this.server.bufferOut.slice(this.bufferStart, this.bufferStart + this.bufferOutOffset));
             this.bufferOutOffset = 0;
         }
     }

@@ -7,6 +7,9 @@ export default class Server {
     clients = [];
     world = new World();
 
+    bufferIn = new Uint8Array(2048 * 30000); // pre-allocate 61MB for incoming packets, reduces GC pressure
+    bufferOut = new Uint8Array(2048 * 30000); // pre-allocate 61MB for outgoing packets, reduces GC pressure
+
     constructor() {
         this.server = net.createServer((socket) => {
             socket.setNoDelay(true);
@@ -15,10 +18,6 @@ export default class Server {
             console.log('Connection from', socket.remoteAddress + ':' + socket.remotePort);
             let client = new Client(this, socket);
             this.clients.push(client);
-
-            socket.on('error', (err) => {
-                console.log(err);
-            });
 
             socket.on('end', () => {
                 console.log('Disconnected from', socket.remoteAddress + ':' + socket.remotePort);
@@ -31,6 +30,7 @@ export default class Server {
             });
 
             socket.on('timeout', () => {
+                console.log('Timeout from', socket.remoteAddress + ':' + socket.remotePort);
                 socket.destroy();
 
                 let index = this.clients.findIndex(c => c.socket == socket);
@@ -41,6 +41,7 @@ export default class Server {
             });
 
             socket.on('error', (err) => {
+                console.log('Disconnected from', socket.remoteAddress + ':' + socket.remotePort + ' (error)');
                 socket.destroy();
 
                 let index = this.clients.findIndex(c => c.socket == socket);

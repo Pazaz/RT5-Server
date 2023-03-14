@@ -8,9 +8,13 @@ const OPENRS2_ID = '259'; // links to rev 578, dated 2009-12-22
 // const OPENRS2_ID = '516'; // links to rev 578, dated 2010-01-22
 const OPENRS2_API = `https://archive.openrs2.org/caches/${OPENRS2_SCOPE}/${OPENRS2_ID}`;
 
+if (!fs.existsSync('data')) {
+    fs.mkdirSync('data', { recursive: true });
+}
+
 if (!fs.existsSync('data/xteas.json')) {
     console.log('Downloading XTEAs...');
-    axios.get(`${OPENRS2_API}/keys.json`).then((response) => {
+    await axios.get(`${OPENRS2_API}/keys.json`).then((response) => {
         fs.writeFileSync('data/xteas.json', JSON.stringify(response.data));
     });
 }
