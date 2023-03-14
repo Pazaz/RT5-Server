@@ -322,13 +322,14 @@ export default class Client {
         this.randomOut = new IsaacRandom(key);
 
         let player = new Player(this);
-        player.id = 1;
         if (opcode == TitleProt.WORLD_RECONNECT) {
             player.reconnecting = true;
         }
         player.windowMode = windowMode;
         player.username = username;
         this.player = player;
+
+        this.server.world.registerPlayer(player);
         this.bufferStart = this.player.id * 30000;
 
         let response = new ByteBuffer();
@@ -348,7 +349,6 @@ export default class Client {
 
         this.socket.write(response.raw);
         this.state = ClientState.GAME;
-
         this.server.world.addPlayer(player);
     }
 

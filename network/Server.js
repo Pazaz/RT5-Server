@@ -24,7 +24,9 @@ export default class Server {
 
                 let index = this.clients.findIndex(c => c.socket == socket);
                 if (index != -1) {
-                    this.world.removePlayer(client);
+                    if (client.player) {
+                        this.world.removePlayer(client);
+                    }
                     this.clients.splice(index, 1);
                 }
             });
@@ -35,7 +37,9 @@ export default class Server {
 
                 let index = this.clients.findIndex(c => c.socket == socket);
                 if (index != -1) {
-                    this.world.removePlayer(client);
+                    if (client.player) {
+                        this.world.removePlayer(client);
+                    }
                     this.clients.splice(index, 1);
                 }
             });
@@ -46,7 +50,9 @@ export default class Server {
 
                 let index = this.clients.findIndex(c => c.socket == socket);
                 if (index != -1) {
-                    this.world.removePlayer(client);
+                    if (client.player) {
+                        this.world.removePlayer(client);
+                    }
                     this.clients.splice(index, 1);
                 }
             });

@@ -79,12 +79,13 @@ export default class Player {
 
                 response.ip2(this.pos.zoneX);
                 response.p2(this.pos.zoneZ);
-                response.p1(0); // map size?
+                response.p1(this.pos.baIndex);
                 response.p1neg(0);
 
-                for (let mapsquareX = ((this.pos.zoneX) - 6) >> 3; mapsquareX <= ((this.pos.zoneX) + 6) >> 3; mapsquareX++) {
-                    for (let mapsquareZ = ((this.pos.zoneX) - 6) >> 3; mapsquareZ <= ((this.pos.zoneX) + 6) >> 3; mapsquareZ++) {
+                for (let mapsquareX = (this.pos.zoneX - (this.pos.baSizeX >> 4)) >> 3; mapsquareX <= (this.pos.zoneX + (this.pos.baSizeX >> 4)) >> 3; mapsquareX++) {
+                    for (let mapsquareZ = (this.pos.zoneZ - (this.pos.baSizeZ >> 4)) >> 3; mapsquareZ <= (this.pos.zoneZ + (this.pos.baSizeZ >> 4)) >> 3; mapsquareZ++) {
                         let xtea = getXtea(mapsquareX, mapsquareZ);
+
                         if (xtea) {
                             for (let i = 0; i < xtea.key.length; i++) {
                                 response.p4(xtea.key[i]);
@@ -260,11 +261,29 @@ export default class Player {
                 //     //     this.placement = true;
                 //     // }
                 // } break;
+                case ClientProt.CLIENT_CHEAT: {
+                    let tele = data.g1();
+                    let cmd = data.gjstr().toLowerCase();
+                    let args = cmd.split(' ');
+                    cmd = args.shift();
+
+                    if (cmd == 'logout') {
+                        this.logout();
+                    }
+                } break;
                 default: {
                     console.log('Unhandled packet', ClientProt[id] ?? id);
                     break;
                 }
             }
         }
+    }
+
+    // ----
+
+    logout() {
+        let response = new ByteBuffer();
+        response.p1(58);
+        this.client.queue(response);
     }
 }

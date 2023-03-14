@@ -1,12 +1,25 @@
 export default class Position {
+    static BUILD_AREA = [104, 120, 136, 168];
+
     x = 0;
     z = 0;
     plane = 0;
+
+    // build area
+    baIndex = 0;
+    baSizeX = Position.BUILD_AREA[this.baIndex];
+    baSizeZ = Position.BUILD_AREA[this.baIndex];
 
     constructor(x = 0, z = 0, plane = 0) {
         this.x = x;
         this.z = z;
         this.plane = plane;
+    }
+
+    updateBuildArea(index) {
+        this.baIndex = index;
+        this.baSizeX = Position.BUILD_AREA[this.baIndex];
+        this.baSizeZ = Position.BUILD_AREA[this.baIndex];
     }
 
     equals(other) {
@@ -62,17 +75,32 @@ export default class Position {
         return this.z & 63;
     }
 
-    // local to the build area (13x13 zones or 104x104 tiles)
-    // we subtract 6 from the current zone to get to the edge of the build area
+    // local to the build area
+    get baStartX() {
+        return (this.zoneX - (this.baSizeX >> 4)) << 3;
+    }
+
+    get baEndX() {
+        return (this.zoneX + (this.baSizeX >> 4)) << 3;
+    }
+
+    get baStartZ() {
+        return (this.zoneZ - (this.baSizeZ >> 4)) << 3;
+    }
+
+    get baEndZ() {
+        return (this.zoneZ + (this.baSizeZ >> 4)) << 3;
+    }
+
     get baLocalX() {
-        // generic version: abs - ((zone - Math.floor(ba / 2)) << 3)
-        return this.x - ((this.zoneX - 6) << 3); // = [48-55]
+        return this.x - this.baStartX;
     }
 
     get baLocalZ() {
-        return this.z - ((this.zoneZ - 6) << 3);
+        return this.z - this.baStartZ;
     }
 
+    // GPI
     get highRes() {
         return this.z | this.x << 14 | this.plane << 28;
     }
