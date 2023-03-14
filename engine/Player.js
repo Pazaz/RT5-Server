@@ -1,6 +1,7 @@
 import { ByteBuffer } from '#util/ByteBuffer.js';
 import ClientProt from '#util/ClientProt.js';
 import { getXtea } from '#util/OpenRS2.js';
+import Position from '#util/Position.js';
 
 export default class Player {
     client = null;
@@ -17,12 +18,11 @@ export default class Player {
     username = '';
     windowMode = 0;
 
-    lastX = -1;
-    lastZ = -1;
-    lastPlane = -1;
-    x = 3213; // 2925;
-    z = 3433; // 3323;
-    plane = 0;
+    lastPos = new Position(0, 0, 0);
+
+    // make-over mage: 2925, 3323, 0
+    // varrock square: 3213, 3443
+    pos = new Position(3213, 3433, 0);
 
     constructor(client) {
         this.client = client;
@@ -37,11 +37,11 @@ export default class Player {
                 response.p2(0);
                 let start = response.offset;
 
+                // INIT_GPI
+
                 response.accessBits();
-                response.pBit(30, this.z | this.x << 14 | this.plane << 28);
-                this.lastX = this.x;
-                this.lastZ = this.z;
-                this.lastPlane = this.plane;
+                response.pBit(30, this.pos.highRes);
+                this.lastPos.clone(this.pos);
 
                 for (let i = 1; i < 2048; i++) {
                     if (this.id == i) {
@@ -60,13 +60,11 @@ export default class Player {
                 response.p2(0);
                 let start = response.offset;
 
-                //
+                // INIT_GPI
 
                 response.accessBits();
-                response.pBit(30, this.z | this.x << 14 | this.plane << 28);
-                this.lastX = this.x;
-                this.lastZ = this.z;
-                this.lastPlane = this.plane;
+                response.pBit(30, this.pos.highRes);
+                this.lastPos.clone(this.pos);
 
                 for (let i = 1; i < 2048; i++) {
                     if (this.id == i) {
@@ -79,13 +77,13 @@ export default class Player {
 
                 // REBUILD_NORMAL
 
-                response.ip2(this.x >> 3);
-                response.p2(this.z >> 3);
+                response.ip2(this.pos.zoneX);
+                response.p2(this.pos.zoneZ);
                 response.p1(0); // map size?
                 response.p1neg(0);
 
-                for (let mapsquareX = ((this.x >> 3) - 6) >> 3; mapsquareX <= ((this.x >> 3) + 6) >> 3; mapsquareX++) {
-                    for (let mapsquareZ = ((this.z >> 3) - 6) >> 3; mapsquareZ <= ((this.z >> 3) + 6) >> 3; mapsquareZ++) {
+                for (let mapsquareX = ((this.pos.zoneX) - 6) >> 3; mapsquareX <= ((this.pos.zoneX) + 6) >> 3; mapsquareX++) {
+                    for (let mapsquareZ = ((this.pos.zoneX) - 6) >> 3; mapsquareZ <= ((this.pos.zoneX) + 6) >> 3; mapsquareZ++) {
                         let xtea = getXtea(mapsquareX, mapsquareZ);
                         if (xtea) {
                             for (let i = 0; i < xtea.key.length; i++) {
@@ -164,7 +162,7 @@ export default class Player {
                 // if (this.placement) {
                 //     buffer.pBit(2, 3); // teleport
                 //     buffer.pBit(1, 1); // full location update
-                //     buffer.pBit(30, this.z | this.x << 14 | this.plane << 28);
+                //     buffer.pBit(30, this.pos.z | this.pos.x << 14 | this.pos.plane << 28);
                 // }
             }
 
@@ -255,8 +253,8 @@ export default class Player {
                 //     let x = data.g2();
                 //     let z = data.ig2();
 
-                //     this.x = x;
-                //     this.z = z;
+                //     this.pos.x = x;
+                //     this.pos.z = z;
 
                 //     // if (ctrlClick) {
                 //     //     this.placement = true;
