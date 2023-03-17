@@ -4,8 +4,8 @@ import ClientProt from '#util/ClientProt.js';
 import { IsaacRandom } from '#util/IsaacRandom.js';
 import { Js5ProtIn, Js5ProtOut } from '#util/Js5Prot.js';
 import { getGroup } from '#util/OpenRS2.js';
-import { fromBase37 } from '#util/StringUtils.js';
-import TitleProt from '#util/TitleProt.js';
+import { fromBase37, toTitleCase } from '#util/StringUtils.js';
+import LoginProt from '#util/LoginProt.js';
 import { WlProtOut, WorldList, WorldListRaw, WorldListChecksum } from '#util/WorldList.js';
 
 const ClientState = {
@@ -75,7 +75,7 @@ export default class Client {
         let opcode = data.g1();
 
         switch (opcode) {
-            case TitleProt.JS5_OPEN: {
+            case LoginProt.JS5_OPEN: {
                 let clientVersion = data.g4();
 
                 if (clientVersion == 578) {
@@ -87,7 +87,7 @@ export default class Client {
                     this.state = ClientState.CLOSED;
                 }
             } break;
-            case TitleProt.WORLDLIST_FETCH: {
+            case LoginProt.WORLDLIST_FETCH: {
                 let checksum = data.g4b();
 
                 this.socket.write(Uint8Array.from([WlProtOut.SUCCESS]));
@@ -116,7 +116,7 @@ export default class Client {
                 response.psize2(response.offset - start);
                 this.socket.write(response.raw);
             } break;
-            case TitleProt.WORLD_HANDSHAKE: { // login
+            case LoginProt.WORLD_HANDSHAKE: { // login
                 let response = new ByteBuffer();
                 response.p1(0);
                 response.p8(BigInt(Math.floor(Math.random() * 0xFFFF_FFFF)) << 32n | BigInt(Math.floor(Math.random() * 0xFFFF_FFFF)));
@@ -124,7 +124,7 @@ export default class Client {
                 this.socket.write(response.raw);
                 this.state = ClientState.LOGIN;
             } break;
-            case TitleProt.CREATE_LOG_PROGRESS: {
+            case LoginProt.CREATE_LOG_PROGRESS: {
                 let day = data.g1();
                 let month = data.g1();
                 let year = data.g2();
@@ -132,7 +132,7 @@ export default class Client {
 
                 this.socket.write(Uint8Array.from([2]));
             } break;
-            case TitleProt.CREATE_CHECK_NAME: {
+            case LoginProt.CREATE_CHECK_NAME: {
                 let username = fromBase37(data.g8());
 
                 // success:
@@ -150,7 +150,7 @@ export default class Client {
 
                 // this.socket.write(response.raw);
             } break;
-            case TitleProt.CREATE_ACCOUNT: {
+            case LoginProt.CREATE_ACCOUNT: {
                 let length = data.g2();
                 data = data.gdata(length);
 
@@ -322,20 +322,20 @@ export default class Client {
         this.randomOut = new IsaacRandom(key);
 
         let player = new Player(this);
-        if (opcode == TitleProt.WORLD_RECONNECT) {
+        if (opcode == LoginProt.WORLD_RECONNECT) {
             player.reconnecting = true;
         }
         player.windowMode = windowMode;
-        player.username = username;
+        player.username = toTitleCase(username);
         this.player = player;
 
         this.server.world.registerPlayer(player);
         this.bufferStart = this.player.id * 30000;
 
         let response = new ByteBuffer();
-        response.p1(opcode == TitleProt.WORLD_RECONNECT ? 15 : 2);
+        response.p1(opcode == LoginProt.WORLD_RECONNECT ? 15 : 2);
 
-        if (opcode == TitleProt.WORLD_CONNECT) {
+        if (opcode == LoginProt.WORLD_CONNECT) {
             response.p1(0); // staff mod level
             response.p1(0); // player mod level
             response.pbool(false); // player underage

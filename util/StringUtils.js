@@ -41,3 +41,10 @@ export function fromBase37(value) {
 
     return chars.slice(12 - len).join('');
 }
+
+export function toTitleCase(str) {
+    return str.replace(
+        /\w\S*/g,
+        (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
+    );
+}

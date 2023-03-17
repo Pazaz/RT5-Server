@@ -1,4 +1,5 @@
 import { ByteBuffer } from '#util/ByteBuffer.js';
+import { toTitleCase } from '#util/StringUtils.js';
 
 const COUNTRY_FLAG = {
     UNITED_STATES: 0, // fallback flag actually
@@ -22,13 +23,6 @@ const COUNTRY_FLAG = {
     PORTUGAL: 179,
     SWEDEN: 191
 };
-
-function toTitleCase(str) {
-    return str.replace(
-        /\w\S*/g,
-        (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
-    );
-}
 
 let countries = [];
 for (let i = 0; i < Object.keys(COUNTRY_FLAG).length; i++) {

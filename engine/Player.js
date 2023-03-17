@@ -3,6 +3,16 @@ import ClientProt from '#util/ClientProt.js';
 import { getXtea } from '#util/OpenRS2.js';
 import Position from '#util/Position.js';
 
+const MessageTypes = {
+    GAME: 0,
+    PUBLIC: 1,
+    TRADE: 4,
+    PRIVATE_TO: 6,
+    PRIVATE_FROM: 7,
+    ASSIST: 10,
+    DEVCONSOLE: 99
+};
+
 export default class Player {
     client = null;
 
@@ -22,7 +32,7 @@ export default class Player {
 
     // make-over mage: 2925, 3323, 0
     // varrock square: 3213, 3443
-    pos = new Position(3213, 3433, 0);
+    pos = new Position(3162, 3490, 0);
 
     constructor(client) {
         this.client = client;
@@ -123,6 +133,10 @@ export default class Player {
                 this.openTab(14, 187);
                 this.openTab(15, 34);
                 this.openTab(16, 182);
+
+                if (!this.reconnecting) {
+                    this.messageGame('Welcome to RuneScape.');
+                }
             }
 
             this.firstLoad = false;
@@ -216,18 +230,19 @@ export default class Player {
             if (body[i] == -1) {
                 buffer.p1(0);
             } else {
+                body[i] += Math.floor(Math.random() * 2);
                 buffer.p2(body[i] | 0x100);
             }
         }
 
         for (let i = 0; i < 5; i++) {
-            buffer.p1(0); // color
+            buffer.p1(Math.floor(Math.random() * 4)); // color
         }
 
         buffer.p2(1426); // bas id
         buffer.pjstr(this.username);
         buffer.p1(3); // combat level
-        buffer.p2(27); // total level
+        buffer.p2(33); // total level
         buffer.p1(0); // sound radius
 
         this.appearance = new ByteBuffer();
@@ -309,6 +324,39 @@ export default class Player {
     logout() {
         let response = new ByteBuffer();
         response.p1(58);
+        this.client.queue(response);
+    }
+
+    messageGame(message, type = MessageTypes.GAME, msg2 = '', msg3 = '') {
+        let response = new ByteBuffer();
+        response.p1(99);
+        response.p1(0);
+        let start = response.offset;
+
+        response.psmart(type);
+        response.p4(Date.now() / 1000);
+
+        let more = 0;
+        if (msg2) {
+            more |= 0x1;
+        }
+
+        if (msg3) {
+            more |= 0x2;
+        }
+
+        response.p1(more);
+        if (more & 0x1) {
+            response.pjstr(msg2);
+        }
+
+        if (more & 0x2) {
+            response.pjstr(msg3);
+        }
+
+        response.pjstr(message);
+
+        response.psize1(response.offset - start);
         this.client.queue(response);
     }
 

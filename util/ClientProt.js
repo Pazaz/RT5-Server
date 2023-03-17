@@ -112,6 +112,6 @@ ClientProt.Length[77] = -1;
 ClientProt.Length[78] = 5;
 ClientProt.Length[79] = 7;
 ClientProt.Length[80] = 7;
-ClientProt.Length[81] = 2;;
+ClientProt.Length[81] = 2;
 
 export default ClientProt;
